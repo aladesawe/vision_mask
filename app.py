@@ -5,6 +5,7 @@ from ultralytics import YOLO
 import tempfile
 import os
 import time
+import subprocess
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List
@@ -113,8 +114,22 @@ def apply_mask(frame, boxes, mask_type='blur', blur_strength=51):
     
     return result_frame
 
-def process_video(video_path, model, target_classes, mask_type, blur_strength, confidence_threshold, progress_callback=None):
-    """Process video and mask detected objects"""
+def convert_to_h264(input_path, output_path):
+    """Convert video to H.264 codec for browser compatibility"""
+    try:
+        subprocess.run([
+            'ffmpeg', '-y', '-i', input_path,
+            '-c:v', 'libx264', '-preset', 'fast',
+            '-crf', '23', '-movflags', '+faststart',
+            '-pix_fmt', 'yuv420p',
+            output_path
+        ], capture_output=True, check=True)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+def process_video(video_path, model, target_classes, mask_type, blur_strength, confidence_threshold, progress_callback=None, batch_size=8):
+    """Process video and mask detected objects with batched inference"""
     cap = cv2.VideoCapture(video_path)
     
     if not cap.isOpened():
@@ -128,10 +143,10 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
     with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
-        output_path = tmp_file.name
+        temp_output_path = tmp_file.name
     
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    out = cv2.VideoWriter(temp_output_path, fourcc, fps, (width, height))
     
     if not out.isOpened():
         cap.release()
@@ -141,39 +156,83 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
     timing_stats = TimingStats()
     total_start = time.perf_counter()
     
+    frame_buffer = []
+    
     while True:
         ret, frame = cap.read()
         if not ret:
+            if frame_buffer:
+                frame_start = time.perf_counter()
+                
+                detection_start = time.perf_counter()
+                results = model(frame_buffer, conf=confidence_threshold, verbose=False)
+                detection_end = time.perf_counter()
+                batch_detection_time = detection_end - detection_start
+                per_frame_detection = batch_detection_time / len(frame_buffer)
+                
+                for i, (frm, result) in enumerate(zip(frame_buffer, results)):
+                    timing_stats.detection_times.append(per_frame_detection)
+                    
+                    boxes_to_mask = []
+                    if result.boxes is not None:
+                        for box in result.boxes:
+                            class_id = int(box.cls[0])
+                            if class_id in target_classes:
+                                boxes_to_mask.append(box.xyxy[0].cpu().numpy())
+                    
+                    masking_start = time.perf_counter()
+                    masked_frame = apply_mask(frm, boxes_to_mask, mask_type, blur_strength)
+                    masking_end = time.perf_counter()
+                    timing_stats.masking_times.append(masking_end - masking_start)
+                    
+                    out.write(masked_frame)
+                    frame_count += 1
+                    
+                    if progress_callback and total_frames > 0:
+                        progress_callback(frame_count / total_frames)
+                
+                frame_end = time.perf_counter()
+                for _ in range(len(frame_buffer)):
+                    timing_stats.frame_times.append((frame_end - frame_start) / len(frame_buffer))
             break
         
-        frame_start = time.perf_counter()
+        frame_buffer.append(frame)
         
-        detection_start = time.perf_counter()
-        results = model(frame, conf=confidence_threshold, verbose=False)
-        
-        boxes_to_mask = []
-        for result in results:
-            if result.boxes is not None:
-                for box in result.boxes:
-                    class_id = int(box.cls[0])
-                    if class_id in target_classes:
-                        boxes_to_mask.append(box.xyxy[0].cpu().numpy())
-        detection_end = time.perf_counter()
-        timing_stats.detection_times.append(detection_end - detection_start)
-        
-        masking_start = time.perf_counter()
-        masked_frame = apply_mask(frame, boxes_to_mask, mask_type, blur_strength)
-        masking_end = time.perf_counter()
-        timing_stats.masking_times.append(masking_end - masking_start)
-        
-        out.write(masked_frame)
-        
-        frame_end = time.perf_counter()
-        timing_stats.frame_times.append(frame_end - frame_start)
-        
-        frame_count += 1
-        if progress_callback and total_frames > 0:
-            progress_callback(frame_count / total_frames)
+        if len(frame_buffer) >= batch_size:
+            frame_start = time.perf_counter()
+            
+            detection_start = time.perf_counter()
+            results = model(frame_buffer, conf=confidence_threshold, verbose=False)
+            detection_end = time.perf_counter()
+            batch_detection_time = detection_end - detection_start
+            per_frame_detection = batch_detection_time / len(frame_buffer)
+            
+            for i, (frm, result) in enumerate(zip(frame_buffer, results)):
+                timing_stats.detection_times.append(per_frame_detection)
+                
+                boxes_to_mask = []
+                if result.boxes is not None:
+                    for box in result.boxes:
+                        class_id = int(box.cls[0])
+                        if class_id in target_classes:
+                            boxes_to_mask.append(box.xyxy[0].cpu().numpy())
+                
+                masking_start = time.perf_counter()
+                masked_frame = apply_mask(frm, boxes_to_mask, mask_type, blur_strength)
+                masking_end = time.perf_counter()
+                timing_stats.masking_times.append(masking_end - masking_start)
+                
+                out.write(masked_frame)
+                frame_count += 1
+                
+                if progress_callback and total_frames > 0:
+                    progress_callback(frame_count / total_frames)
+            
+            frame_end = time.perf_counter()
+            for _ in range(len(frame_buffer)):
+                timing_stats.frame_times.append((frame_end - frame_start) / len(frame_buffer))
+            
+            frame_buffer = []
     
     total_end = time.perf_counter()
     timing_stats.total_time = total_end - total_start
@@ -182,7 +241,15 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
     cap.release()
     out.release()
     
-    return output_path, frame_count, timing_stats
+    with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as final_file:
+        final_output_path = final_file.name
+    
+    if convert_to_h264(temp_output_path, final_output_path):
+        os.unlink(temp_output_path)
+        return final_output_path, frame_count, timing_stats
+    else:
+        os.unlink(final_output_path)
+        return temp_output_path, frame_count, timing_stats
 
 def process_image(image, model, target_classes, mask_type, blur_strength, confidence_threshold):
     """Process single image and mask detected objects"""
