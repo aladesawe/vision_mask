@@ -251,39 +251,9 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
         os.unlink(final_output_path)
         return temp_output_path, frame_count, timing_stats
 
-def process_image(image, model, target_classes, mask_type, blur_strength, confidence_threshold):
-    """Process single image and mask detected objects"""
-    timing_stats = TimingStats()
-    total_start = time.perf_counter()
-    
-    detection_start = time.perf_counter()
-    results = model(image, conf=confidence_threshold, verbose=False)
-    
-    boxes_to_mask = []
-    for result in results:
-        if result.boxes is not None:
-            for box in result.boxes:
-                class_id = int(box.cls[0])
-                if class_id in target_classes:
-                    boxes_to_mask.append(box.xyxy[0].cpu().numpy())
-    detection_end = time.perf_counter()
-    timing_stats.detection_times.append(detection_end - detection_start)
-    
-    masking_start = time.perf_counter()
-    masked_image = apply_mask(image, boxes_to_mask, mask_type, blur_strength)
-    masking_end = time.perf_counter()
-    timing_stats.masking_times.append(masking_end - masking_start)
-    
-    total_end = time.perf_counter()
-    timing_stats.total_time = total_end - total_start
-    timing_stats.frame_count = 1
-    timing_stats.frame_times.append(timing_stats.total_time)
-    
-    return masked_image, len(boxes_to_mask), timing_stats
-
 def main():
     st.title("🎭 Video Object Masking")
-    st.markdown("Upload a video or image and mask specific objects using YOLO object detection.")
+    st.markdown("Upload a video and mask specific objects using YOLO object detection.")
     
     with st.spinner("Loading YOLO model..."):
         model = load_model()
@@ -336,177 +306,104 @@ def main():
             help="Minimum confidence for object detection"
         )
     
-    tab1, tab2 = st.tabs(["📹 Video Processing", "🖼️ Image Processing"])
+    st.subheader("Video Upload")
     
-    with tab1:
-        st.subheader("Video Upload")
-        
-        uploaded_video = st.file_uploader(
-            "Upload a video file",
-            type=['mp4', 'avi', 'mov', 'mkv'],
-            key="video_uploader"
-        )
-        
-        if uploaded_video is not None:
-            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
-                tmp_file.write(uploaded_video.read())
-                input_video_path = tmp_file.name
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("**Original Video:**")
-                st.video(input_video_path)
-            
-            if st.button("🎬 Process Video", type="primary", key="process_video"):
-                if not selected_objects:
-                    st.error("Please select at least one object type to mask.")
-                else:
-                    target_class_ids = [CLASS_TO_ID[obj] for obj in selected_objects if obj in CLASS_TO_ID]
-                    
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    
-                    def update_progress(progress):
-                        progress_bar.progress(progress)
-                        status_text.text(f"Processing: {int(progress * 100)}%")
-                    
-                    try:
-                        with st.spinner("Processing video..."):
-                            output_path, frame_count, timing_stats = process_video(
-                                input_video_path,
-                                model,
-                                target_class_ids,
-                                mask_type,
-                                blur_strength,
-                                confidence_threshold,
-                                update_progress
-                            )
-                        
-                        progress_bar.progress(1.0)
-                        status_text.text(f"Completed! Processed {frame_count} frames.")
-                        
-                        st.subheader("Latency Analysis")
-                        st.markdown("*Timing breakdown for real-time pipeline evaluation:*")
-                        
-                        lat_col1, lat_col2, lat_col3 = st.columns(3)
-                        with lat_col1:
-                            st.metric("Avg Detection", f"{timing_stats.avg_detection_ms:.2f} ms")
-                            st.metric("Avg Masking", f"{timing_stats.avg_masking_ms:.2f} ms")
-                        with lat_col2:
-                            st.metric("Avg Frame Total", f"{timing_stats.avg_frame_ms:.2f} ms")
-                            st.metric("Theoretical FPS", f"{timing_stats.theoretical_fps:.1f}")
-                        with lat_col3:
-                            st.metric("Min Frame", f"{timing_stats.min_frame_ms:.2f} ms")
-                            st.metric("Max Frame", f"{timing_stats.max_frame_ms:.2f} ms")
-                        
-                        st.info(f"**Total processing time:** {timing_stats.total_time:.2f}s for {frame_count} frames | "
-                                f"**Introduced latency per frame:** {timing_stats.avg_frame_ms:.2f} ms")
-                        
-                        with col2:
-                            st.markdown("**Masked Video:**")
-                            st.video(output_path)
-                        
-                        with open(output_path, 'rb') as f:
-                            video_data = f.read()
-                        
-                        if os.path.exists(output_path):
-                            os.unlink(output_path)
-                        
-                        st.download_button(
-                            label="📥 Download Masked Video",
-                            data=video_data,
-                            file_name="masked_video.mp4",
-                            mime="video/mp4"
-                        )
-                        
-                    except Exception as e:
-                        st.error(f"Error processing video: {str(e)}")
-                    finally:
-                        if os.path.exists(input_video_path):
-                            os.unlink(input_video_path)
+    uploaded_video = st.file_uploader(
+        "Upload a video file",
+        type=['mp4', 'avi', 'mov', 'mkv'],
+        key="video_uploader"
+    )
     
-    with tab2:
-        st.subheader("Image Upload")
+    if uploaded_video is not None:
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
+            tmp_file.write(uploaded_video.read())
+            input_video_path = tmp_file.name
         
-        uploaded_image = st.file_uploader(
-            "Upload an image file",
-            type=['jpg', 'jpeg', 'png', 'bmp'],
-            key="image_uploader"
-        )
+        col1, col2 = st.columns(2)
         
-        if uploaded_image is not None:
-            file_bytes = np.asarray(bytearray(uploaded_image.read()), dtype=np.uint8)
-            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-            
-            if image is None:
-                st.error("Could not decode the uploaded image. Please upload a valid image file.")
-                st.stop()
-            
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("**Original Image:**")
-                st.image(image_rgb, use_container_width=True)
-            
-            if st.button("🎨 Process Image", type="primary", key="process_image"):
-                if not selected_objects:
-                    st.error("Please select at least one object type to mask.")
-                else:
-                    target_class_ids = [CLASS_TO_ID[obj] for obj in selected_objects if obj in CLASS_TO_ID]
-                    
-                    try:
-                        with st.spinner("Processing image..."):
-                            masked_image, detection_count, timing_stats = process_image(
-                                image,
-                                model,
-                                target_class_ids,
-                                mask_type,
-                                blur_strength,
-                                confidence_threshold
-                            )
-                        
-                        masked_image_rgb = cv2.cvtColor(masked_image, cv2.COLOR_BGR2RGB)
-                        
-                        with col2:
-                            st.markdown("**Masked Image:**")
-                            st.image(masked_image_rgb, use_container_width=True)
-                        
-                        st.success(f"Detected and masked {detection_count} object(s).")
-                        
-                        st.subheader("Latency Analysis")
-                        lat_col1, lat_col2, lat_col3 = st.columns(3)
-                        with lat_col1:
-                            st.metric("Detection Time", f"{timing_stats.avg_detection_ms:.2f} ms")
-                        with lat_col2:
-                            st.metric("Masking Time", f"{timing_stats.avg_masking_ms:.2f} ms")
-                        with lat_col3:
-                            st.metric("Total Latency", f"{timing_stats.total_time * 1000:.2f} ms")
-                        
-                        _, buffer = cv2.imencode('.png', masked_image)
-                        st.download_button(
-                            label="📥 Download Masked Image",
-                            data=buffer.tobytes(),
-                            file_name="masked_image.png",
-                            mime="image/png"
+        with col1:
+            st.markdown("**Original Video:**")
+            st.video(input_video_path)
+        
+        if st.button("🎬 Process Video", type="primary", key="process_video"):
+            if not selected_objects:
+                st.error("Please select at least one object type to mask.")
+            else:
+                target_class_ids = [CLASS_TO_ID[obj] for obj in selected_objects if obj in CLASS_TO_ID]
+                
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                def update_progress(progress):
+                    progress_bar.progress(progress)
+                    status_text.text(f"Processing: {int(progress * 100)}%")
+                
+                try:
+                    with st.spinner("Processing video..."):
+                        output_path, frame_count, timing_stats = process_video(
+                            input_video_path,
+                            model,
+                            target_class_ids,
+                            mask_type,
+                            blur_strength,
+                            confidence_threshold,
+                            update_progress
                         )
-                        
-                    except Exception as e:
-                        st.error(f"Error processing image: {str(e)}")
+                    
+                    progress_bar.progress(1.0)
+                    status_text.text(f"Completed! Processed {frame_count} frames.")
+                    
+                    st.subheader("Latency Analysis")
+                    st.markdown("*Timing breakdown for real-time pipeline evaluation:*")
+                    
+                    lat_col1, lat_col2, lat_col3 = st.columns(3)
+                    with lat_col1:
+                        st.metric("Avg Detection", f"{timing_stats.avg_detection_ms:.2f} ms")
+                        st.metric("Avg Masking", f"{timing_stats.avg_masking_ms:.2f} ms")
+                    with lat_col2:
+                        st.metric("Avg Frame Total", f"{timing_stats.avg_frame_ms:.2f} ms")
+                        st.metric("Theoretical FPS", f"{timing_stats.theoretical_fps:.1f}")
+                    with lat_col3:
+                        st.metric("Min Frame", f"{timing_stats.min_frame_ms:.2f} ms")
+                        st.metric("Max Frame", f"{timing_stats.max_frame_ms:.2f} ms")
+                    
+                    st.info(f"**Total processing time:** {timing_stats.total_time:.2f}s for {frame_count} frames | "
+                            f"**Introduced latency per frame:** {timing_stats.avg_frame_ms:.2f} ms")
+                    
+                    with col2:
+                        st.markdown("**Masked Video:**")
+                        st.video(output_path)
+                    
+                    with open(output_path, 'rb') as f:
+                        video_data = f.read()
+                    
+                    if os.path.exists(output_path):
+                        os.unlink(output_path)
+                    
+                    st.download_button(
+                        label="📥 Download Masked Video",
+                        data=video_data,
+                        file_name="masked_video.mp4",
+                        mime="video/mp4"
+                    )
+                    
+                except Exception as e:
+                    st.error(f"Error processing video: {str(e)}")
+                finally:
+                    if os.path.exists(input_video_path):
+                        os.unlink(input_video_path)
     
     st.markdown("---")
     st.markdown("""
     ### How to Use
     1. **Select Objects**: Use the sidebar to choose which objects you want to mask (default: person)
     2. **Choose Mask Type**: Select how you want objects to be masked (blur, pixelate, black, or colored)
-    3. **Upload Media**: Upload a video or image file
+    3. **Upload Video**: Upload a video file (MP4, AVI, MOV, MKV)
     4. **Process**: Click the process button to apply masking
-    5. **Download**: Download the processed file with masked objects
+    5. **Download**: Download the processed video with masked objects
     
     ### Supported Objects
-    This application uses YOLO (You Only Look Once) object detection which can detect 80 different object types including:
+    This application uses YOLO object detection which can detect 80 different object types including:
     - People, vehicles (cars, trucks, buses, motorcycles, bicycles)
     - Animals (dogs, cats, birds, horses, etc.)
     - Common objects (phones, laptops, bags, bottles, etc.)
