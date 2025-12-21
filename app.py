@@ -4,7 +4,10 @@ import numpy as np
 from ultralytics import YOLO
 import tempfile
 import os
+import time
 from pathlib import Path
+from dataclasses import dataclass, field
+from typing import List
 
 YOLO_CLASSES = {
     0: 'person', 1: 'bicycle', 2: 'car', 3: 'motorcycle', 4: 'airplane',
@@ -27,6 +30,39 @@ YOLO_CLASSES = {
 }
 
 CLASS_TO_ID = {v: k for k, v in YOLO_CLASSES.items()}
+
+@dataclass
+class TimingStats:
+    """Container for timing statistics"""
+    detection_times: List[float] = field(default_factory=list)
+    masking_times: List[float] = field(default_factory=list)
+    frame_times: List[float] = field(default_factory=list)
+    total_time: float = 0.0
+    frame_count: int = 0
+    
+    @property
+    def avg_detection_ms(self) -> float:
+        return (sum(self.detection_times) / len(self.detection_times) * 1000) if self.detection_times else 0
+    
+    @property
+    def avg_masking_ms(self) -> float:
+        return (sum(self.masking_times) / len(self.masking_times) * 1000) if self.masking_times else 0
+    
+    @property
+    def avg_frame_ms(self) -> float:
+        return (sum(self.frame_times) / len(self.frame_times) * 1000) if self.frame_times else 0
+    
+    @property
+    def min_frame_ms(self) -> float:
+        return min(self.frame_times) * 1000 if self.frame_times else 0
+    
+    @property
+    def max_frame_ms(self) -> float:
+        return max(self.frame_times) * 1000 if self.frame_times else 0
+    
+    @property
+    def theoretical_fps(self) -> float:
+        return 1000 / self.avg_frame_ms if self.avg_frame_ms > 0 else 0
 
 st.set_page_config(
     page_title="Video Object Masking",
@@ -102,12 +138,17 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
         raise ValueError("Could not create output video file")
     
     frame_count = 0
+    timing_stats = TimingStats()
+    total_start = time.perf_counter()
     
     while True:
         ret, frame = cap.read()
         if not ret:
             break
         
+        frame_start = time.perf_counter()
+        
+        detection_start = time.perf_counter()
         results = model(frame, conf=confidence_threshold, verbose=False)
         
         boxes_to_mask = []
@@ -117,22 +158,38 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
                     class_id = int(box.cls[0])
                     if class_id in target_classes:
                         boxes_to_mask.append(box.xyxy[0].cpu().numpy())
+        detection_end = time.perf_counter()
+        timing_stats.detection_times.append(detection_end - detection_start)
         
+        masking_start = time.perf_counter()
         masked_frame = apply_mask(frame, boxes_to_mask, mask_type, blur_strength)
+        masking_end = time.perf_counter()
+        timing_stats.masking_times.append(masking_end - masking_start)
         
         out.write(masked_frame)
+        
+        frame_end = time.perf_counter()
+        timing_stats.frame_times.append(frame_end - frame_start)
         
         frame_count += 1
         if progress_callback and total_frames > 0:
             progress_callback(frame_count / total_frames)
     
+    total_end = time.perf_counter()
+    timing_stats.total_time = total_end - total_start
+    timing_stats.frame_count = frame_count
+    
     cap.release()
     out.release()
     
-    return output_path, frame_count
+    return output_path, frame_count, timing_stats
 
 def process_image(image, model, target_classes, mask_type, blur_strength, confidence_threshold):
     """Process single image and mask detected objects"""
+    timing_stats = TimingStats()
+    total_start = time.perf_counter()
+    
+    detection_start = time.perf_counter()
     results = model(image, conf=confidence_threshold, verbose=False)
     
     boxes_to_mask = []
@@ -142,10 +199,20 @@ def process_image(image, model, target_classes, mask_type, blur_strength, confid
                 class_id = int(box.cls[0])
                 if class_id in target_classes:
                     boxes_to_mask.append(box.xyxy[0].cpu().numpy())
+    detection_end = time.perf_counter()
+    timing_stats.detection_times.append(detection_end - detection_start)
     
+    masking_start = time.perf_counter()
     masked_image = apply_mask(image, boxes_to_mask, mask_type, blur_strength)
+    masking_end = time.perf_counter()
+    timing_stats.masking_times.append(masking_end - masking_start)
     
-    return masked_image, len(boxes_to_mask)
+    total_end = time.perf_counter()
+    timing_stats.total_time = total_end - total_start
+    timing_stats.frame_count = 1
+    timing_stats.frame_times.append(timing_stats.total_time)
+    
+    return masked_image, len(boxes_to_mask), timing_stats
 
 def main():
     st.title("🎭 Video Object Masking")
@@ -239,7 +306,7 @@ def main():
                     
                     try:
                         with st.spinner("Processing video..."):
-                            output_path, frame_count = process_video(
+                            output_path, frame_count, timing_stats = process_video(
                                 input_video_path,
                                 model,
                                 target_class_ids,
@@ -251,6 +318,23 @@ def main():
                         
                         progress_bar.progress(1.0)
                         status_text.text(f"Completed! Processed {frame_count} frames.")
+                        
+                        st.subheader("Latency Analysis")
+                        st.markdown("*Timing breakdown for real-time pipeline evaluation:*")
+                        
+                        lat_col1, lat_col2, lat_col3 = st.columns(3)
+                        with lat_col1:
+                            st.metric("Avg Detection", f"{timing_stats.avg_detection_ms:.2f} ms")
+                            st.metric("Avg Masking", f"{timing_stats.avg_masking_ms:.2f} ms")
+                        with lat_col2:
+                            st.metric("Avg Frame Total", f"{timing_stats.avg_frame_ms:.2f} ms")
+                            st.metric("Theoretical FPS", f"{timing_stats.theoretical_fps:.1f}")
+                        with lat_col3:
+                            st.metric("Min Frame", f"{timing_stats.min_frame_ms:.2f} ms")
+                            st.metric("Max Frame", f"{timing_stats.max_frame_ms:.2f} ms")
+                        
+                        st.info(f"**Total processing time:** {timing_stats.total_time:.2f}s for {frame_count} frames | "
+                                f"**Introduced latency per frame:** {timing_stats.avg_frame_ms:.2f} ms")
                         
                         with col2:
                             st.markdown("**Masked Video:**")
@@ -308,7 +392,7 @@ def main():
                     
                     try:
                         with st.spinner("Processing image..."):
-                            masked_image, detection_count = process_image(
+                            masked_image, detection_count, timing_stats = process_image(
                                 image,
                                 model,
                                 target_class_ids,
@@ -324,6 +408,15 @@ def main():
                             st.image(masked_image_rgb, use_container_width=True)
                         
                         st.success(f"Detected and masked {detection_count} object(s).")
+                        
+                        st.subheader("Latency Analysis")
+                        lat_col1, lat_col2, lat_col3 = st.columns(3)
+                        with lat_col1:
+                            st.metric("Detection Time", f"{timing_stats.avg_detection_ms:.2f} ms")
+                        with lat_col2:
+                            st.metric("Masking Time", f"{timing_stats.avg_masking_ms:.2f} ms")
+                        with lat_col3:
+                            st.metric("Total Latency", f"{timing_stats.total_time * 1000:.2f} ms")
                         
                         _, buffer = cv2.imencode('.png', masked_image)
                         st.download_button(
