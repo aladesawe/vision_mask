@@ -40,10 +40,13 @@ class TimingStats:
     frame_times: List[float] = field(default_factory=list)
     total_time: float = 0.0
     frame_count: int = 0
+    frame_skip: int = 1
+    detections_run: int = 0
     
     @property
     def avg_detection_ms(self) -> float:
-        return (sum(self.detection_times) / len(self.detection_times) * 1000) if self.detection_times else 0
+        active_detections = [t for t in self.detection_times if t > 0]
+        return (sum(active_detections) / len(active_detections) * 1000) if active_detections else 0
     
     @property
     def avg_masking_ms(self) -> float:
@@ -128,8 +131,14 @@ def convert_to_h264(input_path, output_path):
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
-def process_video(video_path, model, target_classes, mask_type, blur_strength, confidence_threshold, progress_callback=None, batch_size=8):
-    """Process video and mask detected objects with batched inference"""
+def process_video(video_path, model, target_classes, mask_type, blur_strength, confidence_threshold, progress_callback=None, max_processing_time=60.0):
+    """Process video with adaptive frame skipping to meet target processing time.
+    
+    Speed optimization strategy:
+    - Calculate frame skip rate based on video duration vs max processing time
+    - Only run detection on keyframes, reuse masks for skipped frames
+    - Downscale frames for detection, apply masks at full resolution
+    """
     cap = cv2.VideoCapture(video_path)
     
     if not cap.isOpened():
@@ -141,6 +150,18 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    video_duration = total_frames / fps if fps > 0 else 0
+    target_time = min(video_duration, max_processing_time)
+    
+    estimated_time_per_detection = 0.15
+    max_detections = int(target_time / estimated_time_per_detection) if estimated_time_per_detection > 0 else total_frames
+    max_detections = max(1, max_detections)
+    
+    frame_skip = max(1, total_frames // max_detections)
+    
+    detection_width = 640
+    scale_factor = detection_width / width if width > detection_width else 1.0
     
     with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
         temp_output_path = tmp_file.name
@@ -156,87 +177,71 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
     timing_stats = TimingStats()
     total_start = time.perf_counter()
     
-    frame_buffer = []
+    current_boxes = []
+    frames_since_detection = 0
     
     while True:
         ret, frame = cap.read()
         if not ret:
-            if frame_buffer:
-                frame_start = time.perf_counter()
+            break
+        
+        frame_start = time.perf_counter()
+        
+        run_detection = (frames_since_detection >= frame_skip) or (frame_count == 0)
+        
+        if run_detection:
+            detection_start = time.perf_counter()
+            
+            if scale_factor < 1.0:
+                small_frame = cv2.resize(frame, (int(width * scale_factor), int(height * scale_factor)))
+                results = model(small_frame, conf=confidence_threshold, verbose=False)
                 
-                detection_start = time.perf_counter()
-                results = model(frame_buffer, conf=confidence_threshold, verbose=False)
-                detection_end = time.perf_counter()
-                batch_detection_time = detection_end - detection_start
-                per_frame_detection = batch_detection_time / len(frame_buffer)
-                
-                for i, (frm, result) in enumerate(zip(frame_buffer, results)):
-                    timing_stats.detection_times.append(per_frame_detection)
-                    
-                    boxes_to_mask = []
+                current_boxes = []
+                for result in results:
                     if result.boxes is not None:
                         for box in result.boxes:
                             class_id = int(box.cls[0])
                             if class_id in target_classes:
-                                boxes_to_mask.append(box.xyxy[0].cpu().numpy())
-                    
-                    masking_start = time.perf_counter()
-                    masked_frame = apply_mask(frm, boxes_to_mask, mask_type, blur_strength)
-                    masking_end = time.perf_counter()
-                    timing_stats.masking_times.append(masking_end - masking_start)
-                    
-                    out.write(masked_frame)
-                    frame_count += 1
-                    
-                    if progress_callback and total_frames > 0:
-                        progress_callback(frame_count / total_frames)
+                                coords = box.xyxy[0].cpu().numpy()
+                                scaled_coords = coords / scale_factor
+                                current_boxes.append(scaled_coords)
+            else:
+                results = model(frame, conf=confidence_threshold, verbose=False)
                 
-                frame_end = time.perf_counter()
-                for _ in range(len(frame_buffer)):
-                    timing_stats.frame_times.append((frame_end - frame_start) / len(frame_buffer))
-            break
-        
-        frame_buffer.append(frame)
-        
-        if len(frame_buffer) >= batch_size:
-            frame_start = time.perf_counter()
+                current_boxes = []
+                for result in results:
+                    if result.boxes is not None:
+                        for box in result.boxes:
+                            class_id = int(box.cls[0])
+                            if class_id in target_classes:
+                                current_boxes.append(box.xyxy[0].cpu().numpy())
             
-            detection_start = time.perf_counter()
-            results = model(frame_buffer, conf=confidence_threshold, verbose=False)
             detection_end = time.perf_counter()
-            batch_detection_time = detection_end - detection_start
-            per_frame_detection = batch_detection_time / len(frame_buffer)
-            
-            for i, (frm, result) in enumerate(zip(frame_buffer, results)):
-                timing_stats.detection_times.append(per_frame_detection)
-                
-                boxes_to_mask = []
-                if result.boxes is not None:
-                    for box in result.boxes:
-                        class_id = int(box.cls[0])
-                        if class_id in target_classes:
-                            boxes_to_mask.append(box.xyxy[0].cpu().numpy())
-                
-                masking_start = time.perf_counter()
-                masked_frame = apply_mask(frm, boxes_to_mask, mask_type, blur_strength)
-                masking_end = time.perf_counter()
-                timing_stats.masking_times.append(masking_end - masking_start)
-                
-                out.write(masked_frame)
-                frame_count += 1
-                
-                if progress_callback and total_frames > 0:
-                    progress_callback(frame_count / total_frames)
-            
-            frame_end = time.perf_counter()
-            for _ in range(len(frame_buffer)):
-                timing_stats.frame_times.append((frame_end - frame_start) / len(frame_buffer))
-            
-            frame_buffer = []
+            timing_stats.detection_times.append(detection_end - detection_start)
+            frames_since_detection = 0
+        else:
+            timing_stats.detection_times.append(0)
+            frames_since_detection += 1
+        
+        masking_start = time.perf_counter()
+        masked_frame = apply_mask(frame, current_boxes, mask_type, blur_strength)
+        masking_end = time.perf_counter()
+        timing_stats.masking_times.append(masking_end - masking_start)
+        
+        out.write(masked_frame)
+        
+        frame_end = time.perf_counter()
+        timing_stats.frame_times.append(frame_end - frame_start)
+        
+        frame_count += 1
+        if progress_callback and total_frames > 0:
+            progress_callback(frame_count / total_frames)
     
     total_end = time.perf_counter()
     timing_stats.total_time = total_end - total_start
     timing_stats.frame_count = frame_count
+    timing_stats.frame_skip = frame_skip
+    timing_stats.detections_run = len([t for t in timing_stats.detection_times if t > 0])
     
     cap.release()
     out.release()
@@ -353,10 +358,10 @@ def main():
                     progress_bar.progress(1.0)
                     status_text.text(f"Completed! Processed {frame_count} frames.")
                     
-                    st.subheader("Latency Analysis")
-                    st.markdown("*Timing breakdown for real-time pipeline evaluation:*")
+                    st.subheader("Performance Analysis")
+                    st.markdown("*Timing breakdown and optimization metrics:*")
                     
-                    lat_col1, lat_col2, lat_col3 = st.columns(3)
+                    lat_col1, lat_col2, lat_col3, lat_col4 = st.columns(4)
                     with lat_col1:
                         st.metric("Avg Detection", f"{timing_stats.avg_detection_ms:.2f} ms")
                         st.metric("Avg Masking", f"{timing_stats.avg_masking_ms:.2f} ms")
@@ -364,11 +369,15 @@ def main():
                         st.metric("Avg Frame Total", f"{timing_stats.avg_frame_ms:.2f} ms")
                         st.metric("Theoretical FPS", f"{timing_stats.theoretical_fps:.1f}")
                     with lat_col3:
-                        st.metric("Min Frame", f"{timing_stats.min_frame_ms:.2f} ms")
-                        st.metric("Max Frame", f"{timing_stats.max_frame_ms:.2f} ms")
+                        st.metric("Frame Skip", f"1:{timing_stats.frame_skip}")
+                        st.metric("Detections Run", f"{timing_stats.detections_run}")
+                    with lat_col4:
+                        st.metric("Total Frames", f"{frame_count}")
+                        speedup = frame_count / timing_stats.detections_run if timing_stats.detections_run > 0 else 1
+                        st.metric("Speedup Factor", f"{speedup:.1f}x")
                     
                     st.info(f"**Total processing time:** {timing_stats.total_time:.2f}s for {frame_count} frames | "
-                            f"**Introduced latency per frame:** {timing_stats.avg_frame_ms:.2f} ms")
+                            f"**Detection ran on {timing_stats.detections_run} frames** (skipped {frame_count - timing_stats.detections_run})")
                     
                     with col2:
                         st.markdown("**Masked Video:**")
