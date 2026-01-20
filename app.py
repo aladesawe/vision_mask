@@ -198,6 +198,7 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
     """Process video with segmentation-based masking and adaptive frame skipping.
     
     Uses YOLO segmentation for precise object boundaries and supports mannequin replacement.
+    Note: Frame skipping is disabled for mannequin mode to ensure precise alignment.
     """
     cap = cv2.VideoCapture(video_path)
     
@@ -214,11 +215,14 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
     video_duration = total_frames / fps if fps > 0 else 0
     target_time = min(video_duration, max_processing_time)
     
-    estimated_time_per_detection = 0.2
-    max_detections = int(target_time / estimated_time_per_detection) if estimated_time_per_detection > 0 else total_frames
-    max_detections = max(1, max_detections)
-    
-    frame_skip = max(1, total_frames // max_detections)
+    # Disable frame skipping for mannequin mode - precise alignment is critical
+    if mask_type == 'mannequin':
+        frame_skip = 1  # Process every frame
+    else:
+        estimated_time_per_detection = 0.2
+        max_detections = int(target_time / estimated_time_per_detection) if estimated_time_per_detection > 0 else total_frames
+        max_detections = max(1, max_detections)
+        frame_skip = max(1, total_frames // max_detections)
     
     with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
         temp_output_path = tmp_file.name

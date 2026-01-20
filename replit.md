@@ -48,8 +48,9 @@ A Streamlit-based application that uses YOLO segmentation to automatically detec
 
 ### Speed Optimizations
 - Adaptive frame skipping based on video duration vs max processing time (60s cap)
-- Reuses detection results for skipped frames
+- Reuses detection results for skipped frames (except mannequin mode)
 - YOLO nano model for faster inference
+- Note: Frame skipping is disabled for mannequin mode to ensure precise alignment between the mask and person position
 
 ### Supported Object Types
 The application can detect and mask 80 different object types including:
