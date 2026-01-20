@@ -9,6 +9,9 @@ import subprocess
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List
+from openai import OpenAI
+import base64
+import io
 
 YOLO_CLASSES = {
     0: 'person', 1: 'bicycle', 2: 'car', 3: 'motorcycle', 4: 'airplane',
@@ -304,6 +307,137 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
         os.unlink(final_output_path)
         return temp_output_path, frame_count, timing_stats
 
+def find_frame_with_most_people(video_path, model, confidence_threshold=0.5, sample_rate=10):
+    """Analyze video to find frame with most people detected.
+    
+    Returns: (frame_index, frame, person_count, result)
+    """
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return None, None, 0, None
+    
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    best_frame_idx = 0
+    best_frame = None
+    best_count = 0
+    best_result = None
+    
+    frame_idx = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if frame_idx % sample_rate == 0:
+            results = model(frame, conf=confidence_threshold, verbose=False)
+            if results and results[0].boxes is not None:
+                person_count = sum(1 for cls in results[0].boxes.cls if int(cls) == 0)
+                if person_count > best_count:
+                    best_count = person_count
+                    best_frame_idx = frame_idx
+                    best_frame = frame.copy()
+                    best_result = results[0]
+        
+        frame_idx += 1
+    
+    cap.release()
+    return best_frame_idx, best_frame, best_count, best_result
+
+
+def create_mask_image_for_ai(frame, result, target_class_id=0):
+    """Create a mask image for OpenAI image editing.
+    
+    Creates a PNG with alpha channel where masked areas are transparent.
+    """
+    h, w = frame.shape[:2]
+    mask = np.zeros((h, w), dtype=np.uint8)
+    
+    if result.masks is None or result.boxes is None:
+        return None
+    
+    for i, (seg_mask, box) in enumerate(zip(result.masks.data, result.boxes)):
+        cls_id = int(box.cls[0])
+        if cls_id == target_class_id:
+            seg_mask_np = seg_mask.cpu().numpy()
+            seg_mask_resized = cv2.resize(seg_mask_np, (w, h), interpolation=cv2.INTER_NEAREST)
+            mask = np.maximum(mask, (seg_mask_resized > 0.5).astype(np.uint8) * 255)
+    
+    kernel = np.ones((15, 15), np.uint8)
+    mask = cv2.dilate(mask, kernel, iterations=2)
+    
+    return mask
+
+
+def ai_replace_people_with_mannequins(frame, mask):
+    """Use OpenAI image editing API to replace people with mannequins.
+    
+    Args:
+        frame: Original BGR frame from OpenCV
+        mask: Binary mask where white (255) indicates areas to replace
+    
+    Returns:
+        Edited frame as numpy array (BGR), or None if failed
+    """
+    try:
+        client = OpenAI(
+            api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
+            base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
+        )
+        
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        h, w = frame.shape[:2]
+        max_size = 1024
+        scale = min(max_size / w, max_size / h, 1.0)
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+        
+        new_w = (new_w // 64) * 64
+        new_h = (new_h // 64) * 64
+        new_w = max(64, new_w)
+        new_h = max(64, new_h)
+        
+        frame_resized = cv2.resize(frame_rgb, (new_w, new_h))
+        mask_resized = cv2.resize(mask, (new_w, new_h))
+        
+        frame_rgba = np.zeros((new_h, new_w, 4), dtype=np.uint8)
+        frame_rgba[:, :, :3] = frame_resized
+        frame_rgba[:, :, 3] = 255 - mask_resized
+        
+        img_buffer = io.BytesIO()
+        from PIL import Image
+        img_pil = Image.fromarray(frame_rgba, 'RGBA')
+        img_pil.save(img_buffer, format='PNG')
+        img_buffer.seek(0)
+        
+        response = client.images.edit(
+            model="gpt-image-1",
+            image=img_buffer,
+            prompt="Replace all transparent areas (where people were) with realistic gray mannequins or dress forms. "
+                   "The mannequins should be solid gray, featureless human-shaped figures that naturally fit the scene. "
+                   "Keep the background and all other elements exactly as they are. "
+                   "The mannequins should have the same pose and position as the original people.",
+            size=f"{new_w}x{new_h}"
+        )
+        
+        if response.data and len(response.data) > 0:
+            image_data = response.data[0].b64_json
+            if image_data:
+                img_bytes = base64.b64decode(image_data)
+                img_array = np.frombuffer(img_bytes, dtype=np.uint8)
+                result_img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+                
+                if result_img is not None:
+                    result_resized = cv2.resize(result_img, (w, h))
+                    return result_resized
+        
+        return None
+        
+    except Exception as e:
+        st.error(f"AI image editing failed: {str(e)}")
+        return None
+
+
 def main():
     st.title("🎭 Video Object Masking")
     st.markdown("Upload a video and mask specific objects using YOLO object detection.")
@@ -351,6 +485,18 @@ def main():
         if mask_type == 'mannequin':
             st.info("Mannequin mode uses segmentation to replace detected people with a mannequin silhouette.")
         
+        st.divider()
+        st.subheader("AI Replacement (Preview)")
+        st.markdown("*Try AI-powered replacement on a single frame*")
+        use_ai_preview = st.checkbox(
+            "Enable AI Frame Preview",
+            value=False,
+            help="Finds the frame with most people and uses AI to replace them with mannequins"
+        )
+        if use_ai_preview:
+            st.warning("AI preview uses OpenAI's image editing API. Cost: ~$0.04-0.19 per frame depending on quality.")
+        
+        st.divider()
         st.subheader("Detection Settings")
         
         confidence_threshold = st.slider(
@@ -381,7 +527,52 @@ def main():
             st.markdown("**Original Video:**")
             st.video(input_video_path)
         
-        if st.button("🎬 Process Video", type="primary", key="process_video"):
+        btn_col1, btn_col2 = st.columns(2)
+        
+        with btn_col1:
+            process_clicked = st.button("🎬 Process Video", type="primary", key="process_video")
+        
+        with btn_col2:
+            if use_ai_preview:
+                ai_preview_clicked = st.button("🤖 AI Preview (Single Frame)", key="ai_preview")
+            else:
+                ai_preview_clicked = False
+        
+        if ai_preview_clicked and use_ai_preview:
+            with st.spinner("Finding frame with most people..."):
+                frame_idx, best_frame, person_count, best_result = find_frame_with_most_people(
+                    input_video_path, model, confidence_threshold, sample_rate=5
+                )
+            
+            if best_frame is not None and person_count > 0:
+                st.success(f"Found frame {frame_idx} with {person_count} people detected.")
+                
+                ai_col1, ai_col2 = st.columns(2)
+                
+                with ai_col1:
+                    st.markdown("**Original Frame:**")
+                    st.image(cv2.cvtColor(best_frame, cv2.COLOR_BGR2RGB), use_container_width=True)
+                
+                mask = create_mask_image_for_ai(best_frame, best_result, target_class_id=0)
+                
+                if mask is not None:
+                    with st.spinner("Calling AI to replace people with mannequins..."):
+                        ai_result = ai_replace_people_with_mannequins(best_frame, mask)
+                    
+                    with ai_col2:
+                        if ai_result is not None:
+                            st.markdown("**AI Mannequin Replacement:**")
+                            st.image(cv2.cvtColor(ai_result, cv2.COLOR_BGR2RGB), use_container_width=True)
+                        else:
+                            st.markdown("**Segmentation Mask (for reference):**")
+                            st.image(mask, use_container_width=True)
+                            st.warning("AI replacement failed. Showing the mask that would be used.")
+                else:
+                    st.warning("Could not create mask for AI editing.")
+            else:
+                st.warning("No people detected in the video.")
+        
+        if process_clicked:
             if not selected_objects:
                 st.error("Please select at least one object type to mask.")
             else:
