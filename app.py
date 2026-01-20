@@ -76,12 +76,12 @@ st.set_page_config(
 
 @st.cache_resource
 def load_model():
-    """Load YOLO model"""
-    model = YOLO('yolov8n.pt')
+    """Load YOLO segmentation model for precise masking"""
+    model = YOLO('yolov8n-seg.pt')
     return model
 
 def apply_mask(frame, boxes, mask_type='blur', blur_strength=51):
-    """Apply mask to detected objects in frame"""
+    """Apply mask to detected objects in frame (bounding box based)"""
     result_frame = frame.copy()
     
     for box in boxes:
@@ -117,6 +117,69 @@ def apply_mask(frame, boxes, mask_type='blur', blur_strength=51):
     
     return result_frame
 
+def apply_segmentation_mask(frame, result, target_classes, mask_type='blur', blur_strength=51):
+    """Apply mask using segmentation for precise object boundaries"""
+    result_frame = frame.copy()
+    
+    if result.masks is None or result.boxes is None:
+        return result_frame
+    
+    masks = result.masks.data.cpu().numpy()
+    boxes = result.boxes
+    
+    combined_mask = np.zeros((frame.shape[0], frame.shape[1]), dtype=np.uint8)
+    
+    for i, box in enumerate(boxes):
+        class_id = int(box.cls[0])
+        if class_id not in target_classes:
+            continue
+        
+        if i >= len(masks):
+            continue
+            
+        mask = masks[i]
+        mask_resized = cv2.resize(mask, (frame.shape[1], frame.shape[0]))
+        binary_mask = (mask_resized > 0.5).astype(np.uint8)
+        combined_mask = np.maximum(combined_mask, binary_mask)
+    
+    if combined_mask.sum() == 0:
+        return result_frame
+    
+    mask_3ch = np.stack([combined_mask] * 3, axis=-1)
+    
+    if mask_type == 'mannequin':
+        mannequin_color = np.full_like(frame, (180, 180, 180))
+        
+        contours, _ = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        edge_mask = np.zeros_like(combined_mask)
+        cv2.drawContours(edge_mask, contours, -1, (1,), 3)
+        edge_3ch = np.stack([edge_mask] * 3, axis=-1)
+        
+        result_frame = np.where(mask_3ch, mannequin_color, result_frame)
+        
+        edge_color = np.full_like(frame, (120, 120, 120))
+        result_frame = np.where(edge_3ch, edge_color, result_frame)
+        
+    elif mask_type == 'blur':
+        blur_size = blur_strength if blur_strength % 2 == 1 else blur_strength + 1
+        blurred = cv2.GaussianBlur(frame, (blur_size, blur_size), 0)
+        result_frame = np.where(mask_3ch, blurred, result_frame)
+        
+    elif mask_type == 'pixelate':
+        h, w = frame.shape[:2]
+        small = cv2.resize(frame, (max(1, w // 20), max(1, h // 20)), interpolation=cv2.INTER_LINEAR)
+        pixelated = cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
+        result_frame = np.where(mask_3ch, pixelated, result_frame)
+        
+    elif mask_type == 'black':
+        result_frame = np.where(mask_3ch, 0, result_frame)
+        
+    elif mask_type == 'color':
+        green = np.full_like(frame, (0, 255, 0))
+        result_frame = np.where(mask_3ch, green, result_frame)
+    
+    return result_frame
+
 def convert_to_h264(input_path, output_path):
     """Convert video to H.264 codec for browser compatibility"""
     try:
@@ -132,12 +195,9 @@ def convert_to_h264(input_path, output_path):
         return False
 
 def process_video(video_path, model, target_classes, mask_type, blur_strength, confidence_threshold, progress_callback=None, max_processing_time=60.0):
-    """Process video with adaptive frame skipping to meet target processing time.
+    """Process video with segmentation-based masking and adaptive frame skipping.
     
-    Speed optimization strategy:
-    - Calculate frame skip rate based on video duration vs max processing time
-    - Only run detection on keyframes, reuse masks for skipped frames
-    - Downscale frames for detection, apply masks at full resolution
+    Uses YOLO segmentation for precise object boundaries and supports mannequin replacement.
     """
     cap = cv2.VideoCapture(video_path)
     
@@ -154,14 +214,11 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
     video_duration = total_frames / fps if fps > 0 else 0
     target_time = min(video_duration, max_processing_time)
     
-    estimated_time_per_detection = 0.15
+    estimated_time_per_detection = 0.2
     max_detections = int(target_time / estimated_time_per_detection) if estimated_time_per_detection > 0 else total_frames
     max_detections = max(1, max_detections)
     
     frame_skip = max(1, total_frames // max_detections)
-    
-    detection_width = 640
-    scale_factor = detection_width / width if width > detection_width else 1.0
     
     with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
         temp_output_path = tmp_file.name
@@ -177,7 +234,7 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
     timing_stats = TimingStats()
     total_start = time.perf_counter()
     
-    current_boxes = []
+    current_result = None
     frames_since_detection = 0
     
     while True:
@@ -192,29 +249,8 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
         if run_detection:
             detection_start = time.perf_counter()
             
-            if scale_factor < 1.0:
-                small_frame = cv2.resize(frame, (int(width * scale_factor), int(height * scale_factor)))
-                results = model(small_frame, conf=confidence_threshold, verbose=False)
-                
-                current_boxes = []
-                for result in results:
-                    if result.boxes is not None:
-                        for box in result.boxes:
-                            class_id = int(box.cls[0])
-                            if class_id in target_classes:
-                                coords = box.xyxy[0].cpu().numpy()
-                                scaled_coords = coords / scale_factor
-                                current_boxes.append(scaled_coords)
-            else:
-                results = model(frame, conf=confidence_threshold, verbose=False)
-                
-                current_boxes = []
-                for result in results:
-                    if result.boxes is not None:
-                        for box in result.boxes:
-                            class_id = int(box.cls[0])
-                            if class_id in target_classes:
-                                current_boxes.append(box.xyxy[0].cpu().numpy())
+            results = model(frame, conf=confidence_threshold, verbose=False)
+            current_result = results[0] if results else None
             
             detection_end = time.perf_counter()
             timing_stats.detection_times.append(detection_end - detection_start)
@@ -224,7 +260,15 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
             frames_since_detection += 1
         
         masking_start = time.perf_counter()
-        masked_frame = apply_mask(frame, current_boxes, mask_type, blur_strength)
+        
+        if current_result is not None:
+            masked_frame = apply_segmentation_mask(
+                frame, current_result, target_classes, 
+                mask_type, blur_strength
+            )
+        else:
+            masked_frame = frame.copy()
+            
         masking_end = time.perf_counter()
         timing_stats.masking_times.append(masking_end - masking_start)
         
@@ -283,9 +327,9 @@ def main():
         
         mask_type = st.selectbox(
             "Mask Type:",
-            options=['blur', 'pixelate', 'black', 'color'],
+            options=['blur', 'pixelate', 'black', 'color', 'mannequin'],
             index=0,
-            help="Choose how detected objects should be masked"
+            help="Choose how detected objects should be masked. 'mannequin' replaces humans with a silhouette."
         )
         
         if mask_type == 'blur':
@@ -299,6 +343,9 @@ def main():
             )
         else:
             blur_strength = 51
+        
+        if mask_type == 'mannequin':
+            st.info("Mannequin mode uses segmentation to replace detected people with a mannequin silhouette.")
         
         st.subheader("Detection Settings")
         
@@ -406,13 +453,18 @@ def main():
     st.markdown("""
     ### How to Use
     1. **Select Objects**: Use the sidebar to choose which objects you want to mask (default: person)
-    2. **Choose Mask Type**: Select how you want objects to be masked (blur, pixelate, black, or colored)
+    2. **Choose Mask Type**: Select how you want objects to be masked:
+       - **blur**: Gaussian blur effect
+       - **pixelate**: Mosaic/pixelation effect  
+       - **black**: Solid black overlay
+       - **color**: Green color overlay
+       - **mannequin**: Replace humans with a mannequin silhouette (uses segmentation)
     3. **Upload Video**: Upload a video file (MP4, AVI, MOV, MKV)
     4. **Process**: Click the process button to apply masking
     5. **Download**: Download the processed video with masked objects
     
     ### Supported Objects
-    This application uses YOLO object detection which can detect 80 different object types including:
+    This application uses YOLO segmentation which can detect and precisely mask 80 different object types including:
     - People, vehicles (cars, trucks, buses, motorcycles, bicycles)
     - Animals (dogs, cats, birds, horses, etc.)
     - Common objects (phones, laptops, bags, bottles, etc.)
