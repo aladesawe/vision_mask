@@ -9,9 +9,16 @@ import subprocess
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List
-from openai import OpenAI
 import base64
 import io
+
+# Try to import OpenAI, but make it optional
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    OpenAI = None
 
 YOLO_CLASSES = {
     0: 'person', 1: 'bicycle', 2: 'car', 3: 'motorcycle', 4: 'airplane',
@@ -488,13 +495,17 @@ def main():
         st.divider()
         st.subheader("AI Replacement (Preview)")
         st.markdown("*Try AI-powered replacement on a single frame*")
-        use_ai_preview = st.checkbox(
-            "Enable AI Frame Preview",
-            value=False,
-            help="Finds the frame with most people and uses AI to replace them with mannequins"
-        )
-        if use_ai_preview:
-            st.warning("AI preview uses OpenAI's image editing API. Cost: ~$0.04-0.19 per frame depending on quality.")
+        if not OPENAI_AVAILABLE:
+            st.info("OpenAI package not installed. AI preview is unavailable.")
+            use_ai_preview = False
+        else:
+            use_ai_preview = st.checkbox(
+                "Enable AI Frame Preview",
+                value=False,
+                help="Finds the frame with most people and uses AI to replace them with mannequins"
+            )
+            if use_ai_preview:
+                st.warning("AI preview uses OpenAI's image editing API. Cost: ~$0.04-0.19 per frame depending on quality.")
         
         st.divider()
         st.subheader("Detection Settings")
