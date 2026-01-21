@@ -392,7 +392,10 @@ def ai_replace_people_with_mannequins(frame, mask):
         
         client = genai.Client(
             api_key=os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY"),
-            http_options={"api_version": "v1alpha", "base_url": os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL")}
+            http_options={
+                "api_version": "",
+                "base_url": os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL")
+            }
         )
         
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
