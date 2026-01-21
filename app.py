@@ -12,15 +12,13 @@ from typing import List
 import base64
 import io
 
-# Try to import google-genai for Gemini, but make it optional
+# Try to import OpenAI, but make it optional
 try:
-    from google import genai
-    from google.genai import types
-    GEMINI_AVAILABLE = True
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
 except ImportError:
-    GEMINI_AVAILABLE = False
-    genai = None
-    types = None
+    OPENAI_AVAILABLE = False
+    OpenAI = None
 
 YOLO_CLASSES = {
     0: 'person', 1: 'bicycle', 2: 'car', 3: 'motorcycle', 4: 'airplane',
@@ -378,7 +376,7 @@ def create_mask_image_for_ai(frame, result, target_class_id=0):
 
 
 def ai_replace_people_with_mannequins(frame, mask):
-    """Use Gemini image generation API to replace people with mannequins.
+    """Use OpenAI image editing API to replace people with mannequins.
     
     Args:
         frame: Original BGR frame from OpenCV
@@ -388,11 +386,9 @@ def ai_replace_people_with_mannequins(frame, mask):
         Edited frame as numpy array (BGR), or None if failed
     """
     try:
-        from PIL import Image
-        
-        client = genai.Client(
-            api_key=os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY"),
-            http_options={"api_version": "v1alpha", "base_url": os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL")}
+        client = OpenAI(
+            api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
+            base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
         )
         
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -403,39 +399,44 @@ def ai_replace_people_with_mannequins(frame, mask):
         new_w = int(w * scale)
         new_h = int(h * scale)
         
+        new_w = (new_w // 64) * 64
+        new_h = (new_h // 64) * 64
+        new_w = max(64, new_w)
+        new_h = max(64, new_h)
+        
         frame_resized = cv2.resize(frame_rgb, (new_w, new_h))
         mask_resized = cv2.resize(mask, (new_w, new_h))
         
-        img_pil = Image.fromarray(frame_resized, 'RGB')
+        frame_rgba = np.zeros((new_h, new_w, 4), dtype=np.uint8)
+        frame_rgba[:, :, :3] = frame_resized
+        frame_rgba[:, :, 3] = 255 - mask_resized
         
-        prompt = (
-            "Edit this image: Replace all people (the masked/highlighted areas in white on the mask) "
-            "with realistic gray mannequins or dress forms. "
-            "The mannequins should be solid gray, featureless human-shaped figures that naturally fit the scene. "
-            "Keep the background and all other elements exactly as they are. "
-            "The mannequins should have the same pose and position as the original people."
+        img_buffer = io.BytesIO()
+        from PIL import Image
+        img_pil = Image.fromarray(frame_rgba, 'RGBA')
+        img_pil.save(img_buffer, format='PNG')
+        img_buffer.seek(0)
+        
+        response = client.images.edit(
+            model="gpt-image-1",
+            image=img_buffer,
+            prompt="Replace all transparent areas (where people were) with realistic gray mannequins or dress forms. "
+                   "The mannequins should be solid gray, featureless human-shaped figures that naturally fit the scene. "
+                   "Keep the background and all other elements exactly as they are. "
+                   "The mannequins should have the same pose and position as the original people.",
+            size=f"{new_w}x{new_h}"
         )
         
-        mask_pil = Image.fromarray(mask_resized, 'L')
-        
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-image",
-            contents=[prompt, img_pil],
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"]
-            )
-        )
-        
-        if response.candidates and len(response.candidates) > 0:
-            for part in response.candidates[0].content.parts:
-                if part.inline_data is not None:
-                    img_bytes = part.inline_data.data
-                    img_array = np.frombuffer(img_bytes, dtype=np.uint8)
-                    result_img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-                    
-                    if result_img is not None:
-                        result_resized = cv2.resize(result_img, (w, h))
-                        return result_resized
+        if response.data and len(response.data) > 0:
+            image_data = response.data[0].b64_json
+            if image_data:
+                img_bytes = base64.b64decode(image_data)
+                img_array = np.frombuffer(img_bytes, dtype=np.uint8)
+                result_img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+                
+                if result_img is not None:
+                    result_resized = cv2.resize(result_img, (w, h))
+                    return result_resized
         
         return None
         
@@ -494,8 +495,8 @@ def main():
         st.divider()
         st.subheader("AI Replacement (Preview)")
         st.markdown("*Try AI-powered replacement on a single frame*")
-        if not GEMINI_AVAILABLE:
-            st.info("Gemini package not installed. AI preview is unavailable.")
+        if not OPENAI_AVAILABLE:
+            st.info("OpenAI package not installed. AI preview is unavailable.")
             use_ai_preview = False
         else:
             use_ai_preview = st.checkbox(
@@ -504,7 +505,7 @@ def main():
                 help="Finds the frame with most people and uses AI to replace them with mannequins"
             )
             if use_ai_preview:
-                st.warning("AI preview uses Gemini's image generation API. Cost: ~$0.04 per frame (billed to Replit credits).")
+                st.warning("AI preview uses OpenAI's image editing API. Cost: ~$0.04-0.19 per frame depending on quality.")
         
         st.divider()
         st.subheader("Detection Settings")
