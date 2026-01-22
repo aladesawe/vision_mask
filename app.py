@@ -418,19 +418,23 @@ def ai_replace_people_with_mannequins(frame, mask):
         
         img_pil = Image.fromarray(frame_resized, 'RGB')
         
+        mask_pil = Image.fromarray(mask_resized, 'L')
+        mask_rgb = Image.fromarray(cv2.cvtColor(mask_resized, cv2.COLOR_GRAY2RGB), 'RGB')
+        
         prompt = (
-            "Edit this image: Replace all people (the masked/highlighted areas in white on the mask) "
-            "with realistic gray mannequins or dress forms. "
-            "The mannequins should be solid gray, featureless human-shaped figures that naturally fit the scene. "
-            "Keep the background and all other elements exactly as they are. "
-            "The mannequins should have the same pose and position as the original people."
+            "I'm providing two images: "
+            "1) The original photo "
+            "2) A black and white mask where WHITE areas show exactly where people are located. "
+            "Edit the FIRST image by replacing ONLY the people in the WHITE masked areas with gray mannequins. "
+            "Each mannequin must be placed EXACTLY where the corresponding person is in the original image - "
+            "same position, same size, same pose. Do NOT move or bunch up the mannequins. "
+            "The mannequins should be solid gray, featureless human-shaped figures. "
+            "Keep the background and all non-person elements exactly as they are."
         )
         
-        mask_pil = Image.fromarray(mask_resized, 'L')
-        
         response = client.models.generate_content(
-            model="gemini-2.5-flash-image",
-            contents=[prompt, img_pil],
+            model="gemini-2.0-flash-exp",
+            contents=[prompt, img_pil, mask_rgb],
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE", "TEXT"]
             )
