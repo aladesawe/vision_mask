@@ -1,11 +1,11 @@
-modules = ["python-3.11"]
+modules = ["python-3.13"]
 [deployment]
 deploymentTarget = "autoscale"
 run = ["streamlit", "run", "app.py", "--server.port", "5000"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["freetype", "lcms2", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "tcl", "tk", "zlib", "ffmpeg", "libGL", "python313Packages.streamlit"]
+packages = ["freetype", "lcms2", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "tcl", "tk", "zlib", "ffmpeg", "libGL", "gcc-unwrapped", "libgcc", "python313Packages.streamlit"]
 
 [workflows]
 runButton = "Project"
@@ -37,3 +37,8 @@ externalPort = 80
 
 [agent]
 integrations = ["python_openai_ai_integrations:1.0.0", "python_gemini_ai_integrations:1.0.0"]
+
+[userenv]
+
+[userenv.shared]
+PYTHONPATH = "/home/runner/workspace/.pythonlibs/lib/python3.13/site-packages"
