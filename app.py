@@ -571,26 +571,28 @@ def main():
             if best_frame is not None and person_count > 0:
                 st.success(f"Found frame {frame_idx} with {person_count} people detected.")
                 
-                ai_col1, ai_col2 = st.columns(2)
-                
-                with ai_col1:
-                    st.markdown("**Original Frame:**")
-                    st.image(cv2.cvtColor(best_frame, cv2.COLOR_BGR2RGB), use_container_width=True)
-                
                 mask = create_mask_image_for_ai(best_frame, best_result, target_class_id=0)
                 
                 if mask is not None:
                     with st.spinner("Calling AI to replace people with mannequins..."):
                         ai_result = ai_replace_people_with_mannequins(best_frame, mask)
                     
+                    ai_col1, ai_col2, ai_col3 = st.columns(3)
+                    
+                    with ai_col1:
+                        st.markdown("**Original Frame:**")
+                        st.image(cv2.cvtColor(best_frame, cv2.COLOR_BGR2RGB), use_container_width=True)
+                    
                     with ai_col2:
+                        st.markdown("**Segmentation Mask:**")
+                        st.image(mask, use_container_width=True)
+                    
+                    with ai_col3:
                         if ai_result is not None:
                             st.markdown("**AI Mannequin Replacement:**")
                             st.image(cv2.cvtColor(ai_result, cv2.COLOR_BGR2RGB), use_container_width=True)
                         else:
-                            st.markdown("**Segmentation Mask (for reference):**")
-                            st.image(mask, use_container_width=True)
-                            st.warning("AI replacement failed. Showing the mask that would be used.")
+                            st.warning("AI replacement failed.")
                 else:
                     st.warning("Could not create mask for AI editing.")
             else:
