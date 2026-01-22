@@ -12,6 +12,13 @@ from typing import List
 import base64
 import io
 
+# Load environment variables from .env file (for local development)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not installed, skip loading .env file
+
 # Try to import google-genai for Gemini, but make it optional
 try:
     from google import genai
