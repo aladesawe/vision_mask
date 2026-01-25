@@ -647,15 +647,15 @@ def main():
                     st.info(f"**Total processing time:** {timing_stats.total_time:.2f}s for {frame_count} frames | "
                             f"**Detection ran on {timing_stats.detections_run} frames** (skipped {frame_count - timing_stats.detections_run})")
                     
-                    with col2:
-                        st.markdown("**Masked Video:**")
-                        st.video(output_path)
-                    
                     with open(output_path, 'rb') as f:
                         video_data = f.read()
                     
                     if os.path.exists(output_path):
                         os.unlink(output_path)
+                    
+                    with col2:
+                        st.markdown("**Masked Video:**")
+                        st.video(video_data)
                     
                     st.download_button(
                         label="📥 Download Masked Video",
