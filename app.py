@@ -51,6 +51,14 @@ YOLO_CLASSES = {
 
 CLASS_TO_ID = {v: k for k, v in YOLO_CLASSES.items()}
 
+# Available Gemini models for AI preview
+GEMINI_MODELS = [
+    # Gemini 3 models
+    ("gemini-3-pro-image-preview", "Gemini 3 Pro Image Preview (Image optimized)"),
+    # Gemini 2.5 models
+    ("gemini-2.5-flash-image", "Gemini 2.5 Flash Image (Image optimized)"),
+]
+
 @dataclass
 class TimingStats:
     """Container for timing statistics"""
@@ -384,15 +392,16 @@ def create_mask_image_for_ai(frame, result, target_class_id=0):
     return mask
 
 
-def ai_replace_people_with_mannequins(frame, mask):
+def ai_replace_people_with_mannequins(frame, mask, model="gemini-2.5-flash"):
     """Use Gemini image generation API to replace people with mannequins.
     
     Args:
         frame: Original BGR frame from OpenCV
         mask: Binary mask where white (255) indicates areas to replace
+        model: Gemini model to use for image generation
     
     Returns:
-        Edited frame as numpy array (BGR), or None if failed
+        Tuple of (edited_frame as numpy array (BGR), model_used), or (None, model) if failed
     """
     try:
         from PIL import Image
@@ -429,7 +438,7 @@ def ai_replace_people_with_mannequins(frame, mask):
         )
         
         response = client.models.generate_content(
-            model="gemini-3-pro-image-preview",
+            model=model,
             contents=[prompt, img_pil, mask_rgb],
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE", "TEXT"]
@@ -445,18 +454,17 @@ def ai_replace_people_with_mannequins(frame, mask):
                     
                     if result_img is not None:
                         result_resized = cv2.resize(result_img, (w, h))
-                        return result_resized
+                        return result_resized, model
         
-        return None
+        return None, model
         
     except Exception as e:
         st.error(f"AI image editing failed: {str(e)}")
-        return None
+        return None, model
 
 
 AI_WARNING = """
-AI preview uses Gemini's image generation API. Costs per frame can be found (here)
-[https://ai.google.dev/gemini-api/docs/gemini-3]
+AI preview uses Gemini's image generation API. Costs per frame can be found [here](https://ai.google.dev/gemini-api/docs/pricing)
 """
 
 
@@ -513,6 +521,7 @@ def main():
         if not GEMINI_AVAILABLE:
             st.info("Gemini package not installed. AI preview is unavailable.")
             use_ai_preview = False
+            selected_ai_model = "gemini-2.5-flash"
         else:
             use_ai_preview = st.checkbox(
                 "Enable AI Frame Preview",
@@ -521,6 +530,18 @@ def main():
             )
             if use_ai_preview:
                 st.warning(AI_WARNING)
+                
+                # Model selection
+                model_options = [model_id for model_id, _ in GEMINI_MODELS]
+                selected_model_idx = st.selectbox(
+                    "Select Gemini Model:",
+                    range(len(GEMINI_MODELS)),
+                    format_func=lambda i: GEMINI_MODELS[i][1],
+                    help="Choose which Gemini model to use for image generation"
+                )
+                selected_ai_model = model_options[selected_model_idx]
+            else:
+                selected_ai_model = "gemini-2.5-flash"
         
         st.divider()
         st.subheader("Detection Settings")
@@ -585,8 +606,8 @@ def main():
                 mask = create_mask_image_for_ai(best_frame, best_result, target_class_id=0)
                 
                 if mask is not None:
-                    with st.spinner("Calling AI to replace people with mannequins..."):
-                        ai_result = ai_replace_people_with_mannequins(best_frame, mask)
+                    with st.spinner(f"Calling AI ({selected_ai_model}) to replace people with mannequins..."):
+                        ai_result, used_model = ai_replace_people_with_mannequins(best_frame, mask, selected_ai_model)
                     
                     ai_col1, ai_col2, ai_col3 = st.columns(3)
                     
@@ -602,6 +623,23 @@ def main():
                         if ai_result is not None:
                             st.markdown("**AI Mannequin Replacement:**")
                             st.image(cv2.cvtColor(ai_result, cv2.COLOR_BGR2RGB), use_container_width=True)
+                            
+                            # Save the edited image with model name
+                            model_name = used_model.replace("/", "_").replace(".", "-")
+                            output_filename = f"ai_preview_frame_{frame_idx}_{model_name}.png"
+                            output_path = os.path.join(tempfile.gettempdir(), output_filename)
+                            cv2.imwrite(output_path, ai_result)
+                            
+                            with open(output_path, 'rb') as f:
+                                st.download_button(
+                                    label=f"📥 Download ({used_model})",
+                                    data=f.read(),
+                                    file_name=output_filename,
+                                    mime="image/png",
+                                    key="download_ai_preview"
+                                )
+                            
+                            st.info(f"✅ Image saved as: {output_filename}")
                         else:
                             st.warning("AI replacement failed.")
                 else:
