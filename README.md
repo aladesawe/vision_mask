@@ -1,4 +1,4 @@
-# Video Object Masking Application
+# Video Object Masking
 ## Motivation
 I came across a court ruling in [Washington State, USA](https://www.king5.com/article/news/investigations/investigators/judge-orders-washington-police-release-surveillance-camera-data-privacy-questions/281-c2037d52-6afb-4bf7-95ad-0eceaf477864), where images captured by automated license plate readers qualify as public records and is subject to the state's Public Record Act. We typically think nothing of these some-what ubiquitous devices while we go about our daily business, but now, with this ruling, there's now significant privacy and safety concern about who, and to what ends, can these captured images be obtained, and used.
 
@@ -54,6 +54,9 @@ With Gemini 2.5 Image model, there are misplaced mannequin, top left on the pyra
 
 ## Improvements
 In real-world applications, there may be need for annotations to indicate objects exempted from masking. There's a possibility for this to be handled with a bit of prompt engineering as well.
+
+A significant improvement to the masking approach is to generate the cryptographic hash of the detected object's data (class label, bounding box, and feature embeddings of the object) and storing only the hash; bypassing the need to store the images or even generate masks. These digial signatures can then be used for law enforcement purposes without the privacy risk associated with capturing the raw footage.
+
 
 ## Other Applications
 - Masking patients in hospitals/operating rooms where video recordings are captured for training purposes
