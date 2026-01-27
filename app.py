@@ -213,7 +213,7 @@ def convert_to_h264(input_path, output_path):
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
-def process_video(video_path, model, target_classes, mask_type, blur_strength, confidence_threshold, progress_callback=None, max_processing_time=60.0):
+def process_video(video_path, model, target_classes, mask_type, blur_strength, confidence_threshold, use_frame_skipping, progress_callback=None, max_processing_time=60.0):
     """Process video with segmentation-based masking and adaptive frame skipping.
     
     Uses YOLO segmentation for precise object boundaries and supports mannequin replacement.
@@ -241,7 +241,7 @@ def process_video(video_path, model, target_classes, mask_type, blur_strength, c
         estimated_time_per_detection = 0.2
         max_detections = int(target_time / estimated_time_per_detection) if estimated_time_per_detection > 0 else total_frames
         max_detections = max(1, max_detections)
-        frame_skip = max(1, total_frames // max_detections)
+        frame_skip = max(1, total_frames // max_detections) if use_frame_skipping else 1
     
     with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
         temp_output_path = tmp_file.name
@@ -399,10 +399,6 @@ def ai_replace_people_with_mannequins(frame, mask):
         
         client = genai.Client(
             api_key=os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY"),
-            http_options={
-                "api_version": "",
-                "base_url": os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL")
-            }
         )
         
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -433,7 +429,7 @@ def ai_replace_people_with_mannequins(frame, mask):
         )
         
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",
+            model="gemini-3-pro-image-preview",
             contents=[prompt, img_pil, mask_rgb],
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE", "TEXT"]
@@ -456,6 +452,12 @@ def ai_replace_people_with_mannequins(frame, mask):
     except Exception as e:
         st.error(f"AI image editing failed: {str(e)}")
         return None
+
+
+AI_WARNING = """
+AI preview uses Gemini's image generation API. Costs per frame can be found (here)
+[https://ai.google.dev/gemini-api/docs/gemini-3]
+"""
 
 
 def main():
@@ -518,7 +520,7 @@ def main():
                 help="Finds the frame with most people and uses AI to replace them with mannequins"
             )
             if use_ai_preview:
-                st.warning("AI preview uses Gemini's image generation API. Cost: ~$0.04 per frame (billed to Replit credits).")
+                st.warning(AI_WARNING)
         
         st.divider()
         st.subheader("Detection Settings")
@@ -530,6 +532,15 @@ def main():
             value=0.5,
             step=0.1,
             help="Minimum confidence for object detection"
+        )
+
+        st.divider()
+        st.subheader("Enable Frame Skipping to speed up processing")
+
+        use_frame_skipping = st.checkbox(
+            "Use Frame Skipping",
+            value=False,
+            help="Skip frames during detection to speed up processing. Always disabled for mannequin mode."
         )
     
     st.subheader("Video Upload")
@@ -620,6 +631,7 @@ def main():
                             mask_type,
                             blur_strength,
                             confidence_threshold,
+                            use_frame_skipping,
                             update_progress
                         )
                     
