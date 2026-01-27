@@ -16,9 +16,51 @@ Another would be to have the captured data pre-processed and stored with masks o
 - From time T+1, when images/videos are processed, all those that match, within a specified confidence threshold, against a database of active investigations or warrants are stored without masks
 - All other non-matched entities are stored with masks
 
-Masking alternatives are explored below.
+Masking alternatives are explored [below](#mask-types).
 
-## Overview
+## Results
+Using a video captured on a visit to the archeological site, Teotihuacan while visiting Mexico city, we mask people using a variety of the options, for a 0.3 detection confidence threshold.
+
+### Original Video
+![View original video - tourists at Teotihuacan archaeological site](assets/test_capture.mov)
+
+## Model Comparison
+
+| Original Frame |  |
+|---|---|
+![Original Frame](assets/original_frame.jpg)
+|---|---|
+| ![Gemini 3 Result](assets/ai_preview_frame_190_gemini-3-pro-image-preview_better.png) | ![Gemini 2.5 Result](assets/ai_preview_frame_190_gemini-2-5-flash-image.png) |
+
+### Observation
+When testing out different Gemini models, I got varying results with the pro-image version 3 giving the most precise in-place replacement of detected people with mannequins, more often than not.
+With Gemini 2.5 Image model, there are misplaced mannequin, top left on the pyramid's steps.
+
+## Other Masking types
+### Pixelated Masking
+![Pixelated masking](assets/pixelated_video.mp4)
+
+### Color Masking
+![Masking with color](assets/color_mask_video.mp4)
+
+### Blurring, of strength 91
+![Blurring of strength 91](assets/blurred_video.mp4)
+
+### Black Masking
+![Masking with color black](assets/black_color_mask_video.mp4)
+
+### Mannequin Silhouette
+![A Mannequin silhoutte](assets/mannequin_video.mp4)
+
+## Improvements
+In real-world applications, there may be need for annotations to indicate objects exempted from masking. There's a possibility for this to be handled with a bit of prompt engineering as well.
+
+## Other Applications
+- Masking patients in hospitals or operating rooms where recording are used for training purposes
+- Selectively masking sections of the audience who do not consent to a particular broadcast channel
+
+
+## Implementation
 A Streamlit-based application that uses YOLO segmentation to automatically detect and mask objects in videos. Users can upload video files, select which object types to mask, choose from multiple masking options including mannequin silhouette replacement, and download the processed output. We also add an AI-mannequin replacement to preview genAI image editing. The type of the mask, and whether frame skipping is enabled during processing, impacts the quality of the result and speed of processing.
 
 ## Features
@@ -102,45 +144,3 @@ The application can detect and mask 80 different object types including:
 - YOLO segmentation model (yolov8n-seg.pt) is downloaded on first run
 - FFmpeg is required for H.264 video conversion
 - Frame skipping is disabled for mannequin mode to ensure precise alignment
-
-
-## Results
-Using a video captured on a visit to the archeological site, Teotihuacan while visiting Mexico city, we mask people using a variety of the options, for a 0.3 detection confidence threshold.
-
-### Original Video
-![View original video - tourists at Teotihuacan archaeological site](assets/test_capture.mov)
-
-## Model Comparison
-
-| Original Frame |  |
-|---|---|
-![Original Frame](assets/original_frame.jpg)
-|---|---|
-| ![Gemini 3 Result](assets/ai_preview_frame_190_gemini-3-pro-image-preview_better.png) | ![Gemini 2.5 Result](assets/ai_preview_frame_190_gemini-2-5-flash-image.png) |
-
-### Observation
-When testing out different Gemini models, I got varying results with the pro-image version 3 giving the most precise in-place replacement of detected people with mannequins, more often than not.
-With Gemini 2.5 Image model, there are misplaced mannequin, top left on the pyramid's steps.
-
-## Other Masking types
-### Pixelated Masking
-![Pixelated masking](assets/pixelated_video.mp4)
-
-### Color Masking
-![Masking with color](assets/color_mask_video.mp4)
-
-### Blurring, of strength 91
-![Blurring of strength 91](assets/blurred_video.mp4)
-
-### Black Masking
-![Masking with color black](assets/black_color_mask_video.mp4)
-
-### Mannequin Silhouette
-![A Mannequin silhoutte](assets/mannequin_video.mp4)
-
-## Improvements
-In real-world applications, there may be need for annotations to indicate objects exempted from masking. There's a possibility for this to be handled with a bit of prompt engineering as well.
-
-## Other Applications
-- Masking patients in hospitals or operating rooms where recording are used for training purposes
-- Selectively masking sections of the audience who do not consent to a particular broadcast channel
