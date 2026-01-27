@@ -29,7 +29,7 @@ Using a video captured on a visit to the archeological site, Teotihuacan while v
 | Original Frame |  |
 |---|---|
 ![Original Frame](assets/original_frame.jpg)
-|---|---|
+| Gemini 3 Pro Image | Gemini 2.5 Flash Image |
 | ![Gemini 3 Result](assets/ai_preview_frame_190_gemini-3-pro-image-preview_better.png) | ![Gemini 2.5 Result](assets/ai_preview_frame_190_gemini-2-5-flash-image.png) |
 
 ### Observation
