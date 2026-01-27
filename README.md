@@ -28,9 +28,9 @@ Using a video captured on a visit to the archeological site, Teotihuacan while v
 
 | Original Frame |  |
 |---|---|
-![Original Frame](assets/original_frame.jpg)
+![Original Frame](https://github.com/aladesawe/vision_mask/blob/b555dfa762898072273bf890d6d9cf02e0fe7367/assets/original_frame.jpg)
 | Gemini 3 Pro Image | Gemini 2.5 Flash Image |
-| ![Gemini 3 Result](assets/ai_preview_frame_190_gemini-3-pro-image-preview_better.png) | ![Gemini 2.5 Result](assets/ai_preview_frame_190_gemini-2-5-flash-image.png) |
+| ![Gemini 3 Result](https://github.com/aladesawe/vision_mask/blob/b555dfa762898072273bf890d6d9cf02e0fe7367/assets/ai_preview_frame_190_gemini-3-pro-image-preview_better.png) | ![Gemini 2.5 Result](https://github.com/aladesawe/vision_mask/blob/b555dfa762898072273bf890d6d9cf02e0fe7367/assets/ai_preview_frame_190_gemini-2-5-flash-image.png) |
 
 ### Observation
 When testing out different Gemini models, I got varying results with the pro-image version 3 giving the most precise in-place replacement of detected people with mannequins, more often than not.
@@ -38,19 +38,19 @@ With Gemini 2.5 Image model, there are misplaced mannequin, top left on the pyra
 
 ## Other Masking types
 ### Pixelated Masking
-![Pixelated masking](assets/pixelated_video.mp4)
+![Pixelated masking](https://github.com/aladesawe/vision_mask/blob/b555dfa762898072273bf890d6d9cf02e0fe7367/assets/pixelated_video.mp4)
 
 ### Color Masking
-![Masking with color](assets/color_mask_video.mp4)
+![Masking with color](https://github.com/aladesawe/vision_mask/blob/b555dfa762898072273bf890d6d9cf02e0fe7367/assets/color_mask_video.mp4)
 
 ### Blurring, of strength 91
-![Blurring of strength 91](assets/blurred_video.mp4)
+![Blurring of strength 91](https://github.com/aladesawe/vision_mask/blob/b555dfa762898072273bf890d6d9cf02e0fe7367/assets/blurred_video.mp4)
 
 ### Black Masking
-![Masking with color black](assets/black_color_mask_video.mp4)
+![Masking with color black](https://github.com/aladesawe/vision_mask/blob/b555dfa762898072273bf890d6d9cf02e0fe7367/assets/black_color_mask_video.mp4)
 
 ### Mannequin Silhouette
-![A Mannequin silhoutte](assets/mannequin_video.mp4)
+![A Mannequin silhoutte](https://github.com/aladesawe/vision_mask/blob/b555dfa762898072273bf890d6d9cf02e0fe7367/assets/mannequin_video.mp4)
 
 ## Improvements
 In real-world applications, there may be need for annotations to indicate objects exempted from masking. There's a possibility for this to be handled with a bit of prompt engineering as well.
