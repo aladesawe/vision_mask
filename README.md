@@ -112,13 +112,12 @@ Using a video captured on a visit to the archeological site, Teotihuacan while v
 
 ## GenAI Mannequin
 [Original Frame](assets/original_frame.jpg)
-[AI Mannequin Replacement](assets/gemini-3-pro-image-preview_1.jpg)
 
 ## Model Comparison
 
 | Original Frame |  |
 |---|---|
-| ![Gemini 3 Result](assets/assets/ai_preview_frame_190_gemini-3-pro-image-preview_better.png) | ![Gemini 2.5 Result](assets/assets/ai_preview_frame_190_gemini-2-5-flash-image.png) |
+| ![Gemini 3 Result](assets/ai_preview_frame_190_gemini-3-pro-image-preview_better.png) | ![Gemini 2.5 Result](assets/ai_preview_frame_190_gemini-2-5-flash-image.png) |
 
 ### Observation
 When testing out different Gemini models, I got varying results with the pro-image version 3 giving the most precise in-place replacement of detected people with mannequins, more often than not.
