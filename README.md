@@ -56,8 +56,8 @@ With Gemini 2.5 Image model, there are misplaced mannequin, top left on the pyra
 In real-world applications, there may be need for annotations to indicate objects exempted from masking. There's a possibility for this to be handled with a bit of prompt engineering as well.
 
 ## Other Applications
-- Masking patients in hospitals or operating rooms where recording are used for training purposes
-- Selectively masking sections of the audience who do not consent to a particular broadcast channel
+- Masking patients in hospitals/operating rooms where video recordings are captured for training purposes
+- Selectively masking sections of an audience who do not consent to a particular broadcast channel
 
 
 ## Implementation
