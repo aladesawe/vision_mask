@@ -22,7 +22,7 @@ Masking alternatives are explored [below](#mask-types).
 Using a video captured on a visit to the archeological site, Teotihuacan while visiting Mexico city, we mask people using a variety of the options, for a 0.3 detection confidence threshold.
 
 ### Original Video
-![View original video - tourists at Teotihuacan archaeological site](assets/test_capture.mov)
+![View original video - tourists at Teotihuacan archaeological site](https://github.com/aladesawe/vision_mask/blob/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/test_capture.MOV)
 
 ## Model Comparison
 
