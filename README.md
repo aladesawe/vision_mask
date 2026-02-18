@@ -34,7 +34,7 @@ Using a video captured on a visit to the archeological site, Teotihuacan while v
 
 ### Observation
 When testing out different Gemini models, I got varying results with the pro-image version 3 giving the most precise in-place replacement of detected people with mannequins, more often than not.
-With Gemini 2.5 Image model, there are misplaced mannequin, top left on the pyramid's steps.
+With Gemini 2.5 Image model, there are misplaced mannequins, top left on the pyramid's steps and failing to replace many, if not all, of the people in the frame.
 
 ## Other Masking types
 ### Pixelated Masking
