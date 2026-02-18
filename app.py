@@ -340,7 +340,6 @@ def find_frame_with_most_people(video_path, model, confidence_threshold=0.5, sam
     if not cap.isOpened():
         return None, None, 0, None
     
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     best_frame_idx = 0
     best_frame = None
     best_count = 0
@@ -423,7 +422,6 @@ def ai_replace_people_with_mannequins(frame, mask, model="gemini-2.5-flash"):
         
         img_pil = Image.fromarray(frame_resized, 'RGB')
         
-        mask_pil = Image.fromarray(mask_resized, 'L')
         mask_rgb = Image.fromarray(cv2.cvtColor(mask_resized, cv2.COLOR_GRAY2RGB), 'RGB')
         
         prompt = (
@@ -479,9 +477,7 @@ def main():
         st.header("Configuration")
         
         st.subheader("Object Selection")
-        common_objects = ['person', 'car', 'truck', 'bus', 'motorcycle', 'bicycle', 
-                          'dog', 'cat', 'bird', 'cell phone', 'laptop']
-        
+
         default_selection = ['person']
         
         selected_objects = st.multiselect(
