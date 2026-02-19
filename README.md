@@ -38,19 +38,19 @@ With Gemini 2.5 Image model, there are misplaced mannequins, top left on the pyr
 
 ## Other Masking types
 ### Pixelated Masking
-<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/pixelated_video.mp4" type="video/mp4; codecs=h264" aria-label="Pixelated masking" width="320" height="240" controls></video>
+<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/64081dfb23f9be2c059a2f8227dcba0c5a3afca1/assets/pixelated_video.mp4" type="video/mp4; codecs=h264" aria-label="Pixelated masking" width="320" height="240" controls></video>
 
 ### Color Masking
-<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/color_mask_video.mp4" type="video/mp4; codecs=h264" aria-label="Masking with green" width="320" height="240" controls></video>
+<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/64081dfb23f9be2c059a2f8227dcba0c5a3afca1/assets/color_mask_video.mp4" type="video/mp4; codecs=h264" aria-label="Masking with green" width="320" height="240" controls></video>
 
 ### Blurring, of strength 91
-<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/blurred_video.mp4" type="video/mp4; codecs=h264" aria-label="Blurring with mask strength 91" width="320" height="240" controls></video>
+<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/64081dfb23f9be2c059a2f8227dcba0c5a3afca1/assets/blurred_video.mp4" type="video/mp4; codecs=h264" aria-label="Blurring with mask strength 91" width="320" height="240" controls></video>
 
 ### Black Masking
-<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/black_color_mask_video.mp4" type="video/mp4; codecs=h264" aria-label="Masking with black" width="320" height="240" controls></video>
+<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/64081dfb23f9be2c059a2f8227dcba0c5a3afca1/assets/black_color_mask_video.mp4" type="video/mp4; codecs=h264" aria-label="Masking with black" width="320" height="240" controls></video>
 
 ### Mannequin Silhouette
-<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/mannequin_video.mp4" type="video/mp4; codecs=h264" aria-label="Mannequin Silhoutte" width="320" height="240" controls></video>
+<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/64081dfb23f9be2c059a2f8227dcba0c5a3afca1/assets/mannequin_video.mp4" type="video/mp4; codecs=h264" aria-label="Mannequin Silhoutte" width="320" height="240" controls></video>
 
 ## Improvements
 In real-world applications, there may be need for annotations to indicate objects exempted from masking. There's a possibility for this to be handled with a bit of prompt engineering as well.
