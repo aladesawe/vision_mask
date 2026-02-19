@@ -22,7 +22,7 @@ Masking alternatives are explored [below](#mask-types).
 Using a video captured on a visit to the archeological site, Teotihuacan while visiting Mexico city, we mask people using a variety of the options, for a 0.3 detection confidence threshold.
 
 ### Original Video
-<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/test_capture.MOV" aria-label="View original video - tourists at Teotihuacan archaeological site" width="320" height="240" controls></video>
+<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/test_capture.MOV" type="video/quicktime; codecs=h264" aria-label="View original video - tourists at Teotihuacan archaeological site" width="320" height="240" controls></video>
 
 ## Model Comparison
 
@@ -38,19 +38,19 @@ With Gemini 2.5 Image model, there are misplaced mannequins, top left on the pyr
 
 ## Other Masking types
 ### Pixelated Masking
-<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/pixelated_video.mp4" aria-label="Pixelated masking" width="320" height="240" controls></video>
+<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/pixelated_video.mp4" type="video/mp4; codecs=h264" aria-label="Pixelated masking" width="320" height="240" controls></video>
 
 ### Color Masking
-<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/color_mask_video.mp4" aria-label="Masking with green" width="320" height="240" controls></video>
+<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/color_mask_video.mp4" type="video/mp4; codecs=h264" aria-label="Masking with green" width="320" height="240" controls></video>
 
 ### Blurring, of strength 91
-<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/blurred_video.mp4" aria-label="Blurring with mask strength 91" width="320" height="240" controls></video>
+<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/blurred_video.mp4" type="video/mp4; codecs=h264" aria-label="Blurring with mask strength 91" width="320" height="240" controls></video>
 
 ### Black Masking
-<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/black_color_mask_video.mp4" aria-label="Masking with black" width="320" height="240" controls></video>
+<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/black_color_mask_video.mp4" type="video/mp4; codecs=h264" aria-label="Masking with black" width="320" height="240" controls></video>
 
 ### Mannequin Silhouette
-<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/mannequin_video.mp4" aria-label="Mannequin Silhoutte" width="320" height="240" controls></video>
+<video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/mannequin_video.mp4" type="video/mp4; codecs=h264" aria-label="Mannequin Silhoutte" width="320" height="240" controls></video>
 
 ## Improvements
 In real-world applications, there may be need for annotations to indicate objects exempted from masking. There's a possibility for this to be handled with a bit of prompt engineering as well.
