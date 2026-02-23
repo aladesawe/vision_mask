@@ -1,25 +1,31 @@
 # Video Object Masking
 ## Motivation
-I came across a court ruling in [Washington State, USA](https://www.king5.com/article/news/investigations/investigators/judge-orders-washington-police-release-surveillance-camera-data-privacy-questions/281-c2037d52-6afb-4bf7-95ad-0eceaf477864), where images captured by automated license plate readers qualify as public records and is subject to the state's Public Record Act. We typically think nothing of these some-what ubiquitous devices while we go about our daily business, but now, with this ruling, there's now significant privacy and safety concern about who, and to what ends, can these captured images be obtained, and used.
+I came across a court ruling in [Washington State, USA](https://www.king5.com/article/news/investigations/investigators/judge-orders-washington-police-release-surveillance-camera-data-privacy-questions/281-c2037d52-6afb-4bf7-95ad-0eceaf477864), which held that images captured by automated license plate readers qualify as public records and are therefore subject to the state’s Public Records Act. We typically think little of these somewhat ubiquitous devices as we go about our daily lives. However, following this ruling, significant privacy and safety concerns now arise around who can access these images, under what conditions, and for what purposes they may be obtained and used.
 
-Law enforcement uses various means to aid their enforcement duties: in responding, real-time, to crime, monitoring crime hot-spots, and establishing ground-truth of events during investigations. Washington State, like most developed tech-driven regions, deploys a network of automated cameras on highways and streets, and captures vehicles and occupants in its law-enforcement needs. There's an argument to be made of how much surveillance is sufficent for public safety; that threshold will be debatable, and will vary as widely as the survey respondents. Add the recent ruling, that such captures are indeed public records, and one may start to question the cost-benefit. 
+Law enforcement agencies use a variety of tools to support their public safety responsibilities: responding in real time to incidents, monitoring crime hotspots, and establishing ground truth during investigations. Washington State, like most technologically advanced regions, deploys a network of automated cameras on highways and streets, capturing vehicles-and sometimes occupants-in service of these objectives. There is an ongoing debate about how much surveillance is sufficient for public safety; this threshold is subjective and varies widely depending on perspective. When combined with the recent ruling that such data constitutes public record, the cost–benefit tradeoff becomes even more complex.
 
-What if there's a way to address the needs of:
-- Law enforcement agencies, to empower them in their public safety endeavors
-- Privacy advocates, who argue that having these identifiable information of private citizens, now adjudged public record, represent a potential safety concern given their daily routines can now easily be reconstructed using these records without them even consenting to it.
+What if there were a way to address the needs of:
 
-One solution is a one-way Homomorphic encryption could work as law enforcement get the ability to perform searches of persons/objects of interest against irreversibly, but computably, encrypted data, given an appropriate confidence level.
+- Law enforcement agencies, empowering them to effectively pursue public safety objectives.
 
-Another would be to have the captured data pre-processed and stored with masks on all personally-identifiable information, safe for those under an existing warrant. For instance, the following scenario plays out:
-- Law enforcement receives a report of a stolen vehicle, or a suspect on the run, at time T
-- All image/video captures just before and until time T, had all license plates, and faces masked when stored
-- From time T+1, when images/videos are processed, all those that match, within a specified confidence threshold, against a database of active investigations or warrants are stored without masks
-- All other non-matched entities are stored with masks
+- Privacy advocates, who argue that making identifiable information of private citizens publicly accessible introduces substantial privacy and safety risks, particularly when individuals’ daily routines can be reconstructed without their knowledge or consent.
+
+One potential approach is to apply one-way homomorphic encryption, enabling law enforcement to perform searches for persons or objects of interest over irreversibly—but computably—encrypted data, subject to appropriate confidence thresholds.
+
+Another approach would involve pre-processing captured data and storing it with all personally identifiable information (PII) masked by default, except for cases supported by an existing warrant. For example:
+
+- Law enforcement receives a report of a stolen vehicle or a suspect at large at time T.
+
+- All image and video captures prior to and up to time T are stored with license plates and faces masked.
+
+- From time T+1 onward, newly captured frames are compared against databases associated with active investigations or warrants, and only those matching above a defined confidence threshold are stored unmasked.
+
+- All non-matching captures remain masked.
 
 Masking alternatives are explored [below](#mask-types).
 
 ## Results
-Using a video captured on a visit to the archeological site, Teotihuacan while visiting Mexico city, we mask people using a variety of the options, for a 0.3 detection confidence threshold.
+Using a video recorded during a visit to the archaeological site of Teotihuacan near Mexico City, we applied several masking techniques to anonymize individuals, using a detection confidence threshold of 0.3.
 
 ### Original Video
 <video src="https://raw.githubusercontent.com/aladesawe/vision_mask/e160e83d4bf7f07e0e083c8219a764c9ea4337b8/assets/test_capture.MOV" type="video/quicktime; codecs=h264" aria-label="View original video - tourists at Teotihuacan archaeological site" width="320" height="240" controls></video>
@@ -33,8 +39,7 @@ Using a video captured on a visit to the archeological site, Teotihuacan while v
 | ![Gemini 3 Result](https://raw.githubusercontent.com/aladesawe/vision_mask/b555dfa762898072273bf890d6d9cf02e0fe7367/assets/ai_preview_frame_190_gemini-3-pro-image-preview_better.png) | ![Gemini 2.5 Result](https://raw.githubusercontent.com/aladesawe/vision_mask/b555dfa762898072273bf890d6d9cf02e0fe7367/assets/ai_preview_frame_190_gemini-2-5-flash-image.png) |
 
 ### Observation
-When testing out different Gemini models, I got varying results with the pro-image version 3 giving the most precise in-place replacement of detected people with mannequins, more often than not.
-With Gemini 2.5 Image model, there are misplaced mannequins, top left on the pyramid's steps and failing to replace many, if not all, of the people in the frame.
+When evaluating different Gemini models, we observed varying performance. The Gemini 3 Pro Image model produced the most precise in-place replacement of detected individuals with mannequin silhouettes in the majority of cases. In contrast, Gemini 2.5 Image occasionally introduced misplaced mannequins—for example, incorrectly inserting figures on the pyramid steps—and often failed to replace many, if not all, individuals present in the frame.
 
 ## Other Masking types
 ### Pixelated Masking
@@ -53,18 +58,19 @@ With Gemini 2.5 Image model, there are misplaced mannequins, top left on the pyr
 <video src="https://raw.githubusercontent.com/aladesawe/vision_mask/64081dfb23f9be2c059a2f8227dcba0c5a3afca1/assets/mannequin_video.mp4" type="video/mp4; codecs=h264" aria-label="Mannequin Silhoutte" width="320" height="240" controls></video>
 
 ## Improvements
-In real-world applications, there may be need for annotations to indicate objects exempted from masking. There's a possibility for this to be handled with a bit of prompt engineering as well.
+In real-world deployments, there may be a need for explicit annotations to designate objects or individuals exempt from masking. This could potentially be addressed through prompt engineering or policy-driven metadata injection.
 
-A significant improvement to the masking approach is to generate the cryptographic hash of the detected object's data (class label, bounding box, and feature embeddings of the object) and storing only the hash; bypassing the need to store the images or even generate masks. These digial signatures can then be used for law enforcement purposes without the privacy risk associated with capturing the raw footage.
+A more significant enhancement would be to compute cryptographic hashes of detected object metadata-including class labels, bounding boxes, and feature embeddings-and store only these hashes rather than the raw images or masked frames. These digital signatures could support law enforcement search and matching operations while significantly reducing the privacy risks associated with retaining raw surveillance footage.
 
 
 ## Other Applications
-- Masking patients in hospitals/operating rooms where video recordings are captured for training purposes
-- Selectively masking sections of an audience who do not consent to a particular broadcast channel
+- Masking patients in hospitals or operating rooms when video recordings are captured for training or quality assurance.
+
+- Selectively masking members of an audience who have not consented to a particular broadcast or recording.
 
 
 ## Implementation
-A Streamlit-based application that uses YOLO segmentation to automatically detect and mask objects in videos. Users can upload video files, select which object types to mask, choose from multiple masking options including mannequin silhouette replacement, and download the processed output. We also add an AI-mannequin replacement to preview genAI image editing. The type of the mask, and whether frame skipping is enabled during processing, impacts the quality of the result and speed of processing.
+We implemented a Streamlit-based application that leverages YOLO segmentation to automatically detect and mask objects in video streams. Users can upload video files, select object categories to anonymize, choose from multiple masking strategies-including mannequin silhouette replacement-and download the processed output. We also include a generative AI–based mannequin replacement mode to preview advanced image-editing techniques. The choice of masking method and the use of frame skipping significantly affect both processing speed and output quality.
 
 ## Features
 - **Video Processing**: Upload videos and mask specific objects with segmentation precision
